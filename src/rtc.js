@@ -60,8 +60,8 @@ function candidateToCandidateStr(candidate, theirCreds) {
 	const priority = 2113937151;
 	const type = candidate.from_stun ? 'srflx' : 'host';
 
-	return `candidate:${foundation} 1 udp ${priority} ${candidate.candidate_ip} ` +
-		`${candidate.candidate_port} typ ${type} generation 0 ufrag ${theirCreds.ice_ufrag} network-cost 50`;
+	return `candidate:${foundation} 1 udp ${priority} ${candidate.ip} ` +
+		`${candidate.port} typ ${type} generation 0 ufrag ${theirCreds.ice_ufrag} network-cost 50`;
 }
 
 export class RTC {
@@ -87,17 +87,7 @@ export class RTC {
 				const carray = event.candidate.candidate.replace('candidate:', '').split(' ');
 
 				if (carray[2].toLowerCase() === 'udp') {
-					this.onCandidate({
-						action: 'candidate_exchange',
-						subject: 'server',
-						to: this.serverId,
-						attempt_id: this.attemptId,
-						candidate_ip: carray[4],
-						candidate_port: parseInt(carray[5]),
-						sync: 0,
-						from_stun: carray[7] === 'srflx' ? 1 : 0,
-						lan: carray[7] === 'host' ? 1 : 0,
-					});
+					this.onCandidate(carray[4], parseInt(carray[5], 10), false, "srflx" === carray[7], "host" === carray[7]);
 				}
 			}
 		};
@@ -112,7 +102,7 @@ export class RTC {
 	}
 
 	addChannel(name, id, onOpen, onMessage) {
-		this.channels[id] = this.rtc.createDataChannel(name, {id});
+		this.channels[id] = this.rtc.createDataChannel(name, {id, negotiated: true});
 		this.channels[id].binaryType = 'arraybuffer';
 		this.channels[id].onopen = onOpen;
 		this.channels[id].onmessage = onMessage;
@@ -140,31 +130,31 @@ export class RTC {
 			await this.rtc.setLocalDescription(this.offer);
 
 			const sdpStr = credsToSDPStr(theirCreds, this.sdp.a.mid);
-			await this.rtc.setRemoteDescription({type: 'answer', sdp: sdpStr});
+			try {
+				await this.rtc.setRemoteDescription({type: 'answer', sdp: sdpStr});
+			} catch(e) {
+				console.warn(e);
+			}
 
 			this.started = true;
 		}
 
 		if (!candidate.sync) {
-			await this.rtc.addIceCandidate({
-				candidate: candidateToCandidateStr(candidate, theirCreds),
-				sdpMid: this.sdp.a.mid,
-				sdpMLineIndex: 0,
-			});
+			try {
+				await this.rtc.addIceCandidate({
+					candidate: candidateToCandidateStr(candidate, theirCreds),
+					sdpMid: this.sdp.a.mid,
+					sdpMLineIndex: 0,
+				});
+			} catch(e) {
+				console.warn(e);
+			}
+
+
 
 			if (candidate.from_stun && !this.synced) {
 				setTimeout(() => {
-					this.onCandidate({
-						action: 'candidate_exchange',
-						subject: 'server',
-						to: this.serverId,
-						attempt_id: this.attemptId,
-						candidate_ip: '1.2.3.4',
-						candidate_port: 1234,
-						sync: 1,
-						from_stun: 0,
-						lan: 0,
-					});
+					this.onCandidate("1.2.3.4", 1234, true, false, false);
 				}, 100);
 
 				this.synced = true;

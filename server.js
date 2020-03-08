@@ -1,11 +1,8 @@
-const https = require('https');
+const http = require('http');
 const url = require('url');
 const fs = require('fs');
 
-const options = {
-	key: fs.readFileSync('example/devlocal.info.key'),
-	cert: fs.readFileSync('example/devlocal.info.cert'),
-};
+const PORT = process.env.PORT || 8080;
 
 const mimes = {
 	css  : 'text/css',
@@ -31,7 +28,7 @@ function timeStamp() {
 		`${zeroPad(d.getHours())}:${zeroPad(d.getMinutes())}:${zeroPad(d.getSeconds())}`;
 }
 
-https.createServer(options, (req, res) => {
+http.createServer({}, (req, res) => {
 	const parsed = url.parse(req.url);
 	const fileName = parsed.pathname === '/' ? '/index.html' : parsed.pathname;
 	const fileType = fileName.split('.').slice(-1)[0];
@@ -51,6 +48,6 @@ https.createServer(options, (req, res) => {
 	res.writeHead(code, {'Content-Type': mimes[fileType] || 'text/plain'});
 	res.end(body);
 
-}).listen(443);
+}).listen(PORT);
 
-console.log('Development server started on port 443');
+console.log('Development server started on port '+PORT);

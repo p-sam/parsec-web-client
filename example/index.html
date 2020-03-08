@@ -3,7 +3,7 @@
 
 <head>
 	<meta charset='utf-8'>
-	<title>Parsec Web Client</title>
+	<title>Parsec Web Client Example OSS</title>
 	<link rel="stylesheet" href="style.css">
 </head>
 
@@ -12,14 +12,57 @@
 		<video></video>
 	</div>
 
-	<table id='server-list'></table>
+	<table id='server-list'>
+	</table>
+
+	<table id='auth'>
+		<tr><td>Email</td>    <td><input id='email'    type='email' autofocus /></td></tr>
+		<tr><td>Password</td> <td><input id='password' type='password' /></td></tr>
+		<tr><td>TFA</td>      <td><input id='tfa'      type='text' /></td></tr>
+	</table>
 
 	<script type='module'>
-		import * as API from './api.js';
 		import {Client} from './client.js';
 
+		/*** API ***/
 
-		/*** CLIENT ***/
+		const OLD_HOST = 'api.parsecgaming.com';
+		const HOST = 'kessel-api.parsecgaming.com';
+
+		async function auth(email, password, tfa) {
+			const res = await fetch(`https://${OLD_HOST}/v1/auth`, {
+				method: 'post',
+				headers: {
+					'Content-Type': 'application/json; charset=utf-8',
+				},
+				body: JSON.stringify({
+					email,
+					password,
+					tfa,
+				}),
+			});
+
+			return await res.json();
+		}
+
+		async function serverList(sessionId) {
+			const res = await fetch(`https://${HOST}/hosts/`, {
+				method: 'get',
+				headers: {
+					'Authorization': 'Bearer ' + sessionId,
+				},
+			});
+
+			return await res.json();
+		}
+
+
+		/*** MAIN ***/
+
+		function _(selector) {
+			return document.querySelector(selector);
+		}
+
 		function toggleFullscreen(element) {
 			if (document.webkitFullscreenElement) {
 				document.webkitExitFullscreen();
@@ -63,8 +106,6 @@
 			});
 		}
 
-
-		/*** UI HELPERS ***/
 		function addRow(table) {
 			const tr = document.createElement('tr');
 			table.appendChild(tr);
@@ -87,40 +128,25 @@
 			td.appendChild(button);
 		}
 
-		function addInputCol(tr, id, type, onenter) {
-			const td = document.createElement('td');
-			tr.appendChild(td);
-
-			const input = document.createElement('input');
-			input.id = id;
-			input.type = type;
-			input.onkeyup = (event) => {
-				if (event.keyCode === 13)
-					onenter();
-			};
-			td.appendChild(input);
-		}
-
-
-		/*** MAIN ***/
 		async function serverTable(sessionId) {
-			const json = await API.serverList(sessionId);
-			const table = document.querySelector('#server-list');
 
-			for (const server of json) {
+			const json = await serverList(sessionId);
+			const table = _('#server-list');
+
+			for (const server of json.data) {
 				const tr = addRow(table);
 				addTextCol(tr, server.name);
 				addTextCol(tr, server.build);
-				addTextCol(tr, server.server_id);
-				addTextCol(tr, server.status);
+				addTextCol(tr, server.peer_id);
+				addTextCol(tr, server.user_name);
 				addButtonCol(tr, 'Connect', async () => {
-					const container = document.querySelector('.video-container');
-					const element = document.querySelector('video');
+					const container = _('.video-container');
+					const elementVideo = _('video');
 
 					table.style.display = 'none';
 					container.style.display = 'block';
 
-					const code = await runClient(element, sessionId, server.server_id);
+					const code = await runClient(elementVideo, sessionId, server.peer_id);
 
 					table.style.display = '';
 					container.style.display = '';
@@ -135,40 +161,47 @@
 
 			const tr = addRow(table);
 			addButtonCol(tr, 'Logout', () => {
-				delete sessionStorage.sessionId;
+				delete localStorage.sessionId;
 				window.location.reload();
 			});
 		}
 
-		function authTable() {
-			async function submit() {
-				const email = document.querySelector('#email').value;
-				const password = document.querySelector('#password').value;
+		async function submit() {
+			try {
+				const email = _('#email').value;
+				const password = _('#password').value;
+				const tfa = _('#tfa').value;
 
-				const json = await API.auth(email, password);
-				sessionStorage.sessionId = json.session_id;
-				window.location.reload();
+				const json = await auth(email, password, tfa);
+
+				if (json.session_id) {
+					localStorage.sessionId = json.session_id;
+					window.location.reload();
+				} else {
+					console.log(json);
+				}
+			} catch (e) {
+				console.log(e);
 			}
-
-			const table = document.querySelector('#server-list');
-
-			let tr = addRow(table);
-			addTextCol(tr, 'Email');
-			addInputCol(tr, 'email', 'email', submit);
-
-			tr = addRow(table);
-			addTextCol(tr, 'Password');
-			addInputCol(tr, 'password', 'password', submit);
-
-			document.querySelector('#email').focus();
 		}
 
-		if (!sessionStorage.sessionId) {
-			authTable();
+		function ui() {
+			_('#email').onkeyup = _('#password').onkeyup = _('#tfa').onkeyup = (event) => {
+				if (event.keyCode === 13) submit();
+			};
 
-		} else {
-			serverTable(sessionStorage.sessionId);
+			if (!localStorage.sessionId) {
+				_('#server-list').style.display = 'none';
+				_('#auth').style.display = 'table';
+
+			} else {
+				_('#auth').style.display = 'none';
+				_('#server-list').style.display = 'table';
+				serverTable(localStorage.sessionId);
+			}
 		}
+
+		ui();
 	</script>
 </body>
 

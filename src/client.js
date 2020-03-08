@@ -1,5 +1,4 @@
 // Util modules
-import * as API from './api.js';
 import * as Enum from './enum.js';
 import * as Msg from './msg.js';
 import * as Util from './util.js';
@@ -18,7 +17,7 @@ function cfgDefaults(cfg) {
 	cfg.network_video_container = 2;
 
 	if (!cfg.app_ss_endpoint)
-		cfg.app_ss_endpoint = 'signal-load.parsec.tv';
+		cfg.app_ss_endpoint = 'kessel-ws.parsecgaming.com';
 
 	if (!cfg.app_ss_port)
 		cfg.app_ss_port = 443;
@@ -100,20 +99,27 @@ export class Client {
 	async connect(sessionId, serverId, cfg) {
 		cfg = cfgDefaults(cfg);
 
-		const onRTCCandidate = (candidate) => {
-			this.signal.send(sessionId, candidate);
+		const onRTCCandidate = (ip, port, sync, from_stun, lan) => {
+			this.signal.send({
+				action: 'candex',
+				version: 1,
+				payload: {
+					to: this.signal.serverId,
+					attempt_id: this.signal.attemptId,
+					data: {
+						ver_data: 1,
+						ip,
+						port,
+						lan,
+						from_stun,
+						sync: false
+					}
+				}
+			});
 		};
 
 		const onControlOpen = () => {
 			this.connected = true;
-
-			//XXX required to prevent Parsec managed cloud machines from shutting down
-			this.logInterval = setInterval(() => {
-				API.connectionUpdate({
-					attempt_id: this.signal.getAttemptId(),
-					state_str: 'LSC_EVENTLOOP',
-				});
-			}, 60000);
 
 			this.listeners.push(Util.addListener(document, 'visibilitychange', () => {
 				if (document.hidden) {
@@ -125,8 +131,7 @@ export class Client {
 				}
 			}));
 
-			this.rtc.send(Msg.config(cfg), 0);
-			this.rtc.send(Msg.init(), 0);
+			this.rtc.send(Msg.init(cfg), 0);
 
 			this.input.attach();
 			this.onEvent({type: 'connect'});
@@ -165,12 +170,6 @@ export class Client {
 			clearInterval(this.logInterval);
 			this.rtc.send(Msg.abort(code), 0);
 		}
-
-		API.connectionUpdate({
-			state_str: 'LSC_EXIT',
-			attempt_id: this.signal.getAttemptId(),
-			exit_code: code,
-		});
 
 		this.rtc.close();
 		this.connected = false;

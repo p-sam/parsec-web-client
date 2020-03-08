@@ -21,8 +21,13 @@ html, body {
 }
 
 #server-list {
-	z-index: 1000;
 	margin-top: 30px;
+	display: none;
+}
+
+#auth {
+	margin-top: 30px;
+	display: none;
 }
 
 .video-container {

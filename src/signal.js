@@ -24,7 +24,7 @@ export class Signal {
 	}
 
 	connect(host, port, sessionId, serverId, creds, onCandidate) {
-		this.ws = new WebSocket(`wss://${host}:${port}`);
+		this.ws = new WebSocket(`wss://${host}:${port}/?session_id=${sessionId}&role=client&version=1&sdk_version=0`);
 
 		this.ws.onclose = (event) => {
 			if (event.code !== 1000)
@@ -32,34 +32,52 @@ export class Signal {
 		};
 
 		this.ws.onopen = () => {
-			this.send(sessionId, {
-				action: 'connection_init',
-				subject: 'server',
-				to: serverId,
-				attempt_id: this.attemptId,
-				timeout_ms: 30000,
-				mode: 2,
-				creds,
+			this.send({
+				action : "offer",
+				version : 1,
+				payload : {
+					to: serverId,
+					attempt_id: this.attemptId,
+					data: {
+						ver_data: 1,
+						mode: 2,
+						creds,
+						versions: {
+							p2p: 1,
+							bud: 1,
+							init: 1,
+							video: 1,
+							audio: 1,
+							control: 1
+						}
+					}
+				}
 			});
-
-			this.interval = setInterval(() => {
-				this.ws.send('PING');
-			}, 30000);
 		};
 
+		this.ready = false;
+		this.queuedCandidates = [];
 		this.ws.onmessage = (event) => {
 			const msg = JSON.parse(event.data);
 
 			switch (msg.action) {
-				case 'connection_init_response':
-					if (!msg.approved)
+				case 'answer_relay':
+					if (!msg.payload.approved)
 						this.onFatal(Enum.Warning.Reject);
 
-					this.theirCreds = msg.creds;
+					this.ready = true;
+					this.theirCreds = msg.payload.data.creds;
+					for(let candidate of this.queuedCandidates) {
+						onCandidate(candidate, this.theirCreds);
+					}
 					break;
 
-				case 'candidate_exchange':
-					onCandidate(msg, this.theirCreds);
+				case 'candex_relay':
+					if(this.ready) {
+						onCandidate(msg.payload.data, this.theirCreds);
+					} else {
+						this.queuedCandidates.push(msg.payload.data);
+					}
 					break;
 
 				case 'error':
@@ -73,8 +91,7 @@ export class Signal {
 		return this.attemptId;
 	}
 
-	send(token, json) {
-		json.token = token;
+	send(json) {
 		this.ws.send(JSON.stringify(json));
 	}
 

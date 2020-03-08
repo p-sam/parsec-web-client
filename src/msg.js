@@ -8,10 +8,10 @@ const CONTROL_SIZE = 13;
 
 function packControl(buf, type, data0, data1, data2) {
 	const dest = new DataView(buf);
-	dest.setInt8(0, type);
-	dest.setInt32(1, data0);
-	dest.setInt32(5, data1);
-	dest.setInt32(9, data2);
+	dest.setInt32(0, data0);
+	dest.setInt32(4, data1);
+	dest.setInt32(8, data2);
+	dest.setInt8(12, type);
 }
 
 function packString(buf, offset, str) {
@@ -33,7 +33,6 @@ function control(type, data0, data1, data2) {
 
 function strMsg(type, str) {
 	const buf = new ArrayBuffer(CONTROL_SIZE + str.length + 1);
-
 	packControl(buf, type, str.length + 1, 0, 0);
 	packString(buf, CONTROL_SIZE, str);
 
@@ -68,8 +67,17 @@ export function unplug(index) {
 	return control(Enum.Msg.Unplug, 0, 0, index);
 }
 
-export function init() {
-	return control(Enum.Msg.Init, 0, 0, 0);
+export function init(cfg) {
+	return strMsg(Enum.Msg.Init, JSON.stringify({
+		_version: 1,
+		_max_w: 6E4,
+		_max_h: 6E4,
+		_flags: 0,
+		resolutionX: cfg.server_resolution_x,
+		resolutionY: cfg.server_resolution_y,
+		refreshRate: 60,
+		mediaContainer: cfg.network_video_container
+	}));
 }
 
 export function block() {
@@ -102,28 +110,28 @@ export function config(cfg) {
 
 function unpackControl(view) {
 	return {
-		type: view.getInt8(0),
-		data0: view.getInt32(1),
-		data1: view.getInt32(5),
-		data2: view.getInt32(9),
+		type: view.getInt8(12),
+		data0: view.getInt32(0),
+		data1: view.getInt32(4),
+		data2: view.getInt32(8),
 	};
 }
 
 function unpackCursor(view) {
-	const dataLen = view.getInt32(13);
-	const flags = view.getInt16(29);
+	const dataLen = view.getInt32(16);
+	const flags = view.getInt16(32);
 
 	return {
-		w: view.getInt16(17),
-		h: view.getInt16(19),
-		x: view.getInt16(21),
-		y: view.getInt16(23),
-		hotX: view.getInt16(25),
-		hotY: view.getInt16(27),
+		w: view.getInt16(20),
+		h: view.getInt16(22),
+		x: view.getInt16(24),
+		y: view.getInt16(26),
+		hotX: view.getInt16(28),
+		hotY: view.getInt16(30),
 		relative: !!(flags & Enum.CursorFlags.IsRelative),
 		hidden: !!(flags & Enum.CursorFlags.IsHidden),
 		data: flags & Enum.CursorFlags.UpdateImage ?
-			btoa(String.fromCharCode(...new Uint8Array(view.buffer, 31, dataLen - 1))) : null,
+			btoa(String.fromCharCode(...new Uint8Array(view.buffer, 34, dataLen - 1))) : null,
 	};
 }
 
